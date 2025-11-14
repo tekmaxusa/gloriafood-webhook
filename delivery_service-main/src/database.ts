@@ -20,6 +20,7 @@ export interface Order {
   sent_to_doordash?: number; // 0 or 1
   doordash_order_id?: string;
   doordash_sent_at?: string;
+  doordash_tracking_url?: string;
 }
 
 export class OrderDatabase {
@@ -52,7 +53,8 @@ export class OrderDatabase {
         fetched_at TEXT DEFAULT CURRENT_TIMESTAMP,
         sent_to_doordash INTEGER DEFAULT 0,
         doordash_order_id TEXT,
-        doordash_sent_at TEXT
+        doordash_sent_at TEXT,
+        doordash_tracking_url TEXT
       );
 
       CREATE INDEX IF NOT EXISTS idx_gloriafood_order_id ON orders(gloriafood_order_id);
@@ -65,6 +67,7 @@ export class OrderDatabase {
     try { this.db.exec(`ALTER TABLE orders ADD COLUMN sent_to_doordash INTEGER DEFAULT 0`); } catch (e) {}
     try { this.db.exec(`ALTER TABLE orders ADD COLUMN doordash_order_id TEXT`); } catch (e) {}
     try { this.db.exec(`ALTER TABLE orders ADD COLUMN doordash_sent_at TEXT`); } catch (e) {}
+    try { this.db.exec(`ALTER TABLE orders ADD COLUMN doordash_tracking_url TEXT`); } catch (e) {}
   }
 
   insertOrUpdateOrder(orderData: any): Order | null {
@@ -127,18 +130,19 @@ export class OrderDatabase {
     }
   }
 
-  markOrderSentToDoorDash(gloriafoodOrderId: string, doordashOrderId?: string): void {
+  markOrderSentToDoorDash(gloriafoodOrderId: string, doordashOrderId?: string, trackingUrl?: string): void {
     try {
       const stmt = this.db.prepare(`
         UPDATE orders
         SET sent_to_doordash = 1,
             doordash_order_id = COALESCE(?, doordash_order_id),
+            doordash_tracking_url = COALESCE(?, doordash_tracking_url),
             doordash_sent_at = ?,
             updated_at = ?
         WHERE gloriafood_order_id = ?
       `);
       const now = new Date().toISOString();
-      stmt.run(doordashOrderId || null, now, now, gloriafoodOrderId);
+      stmt.run(doordashOrderId || null, trackingUrl || null, now, now, gloriafoodOrderId);
     } catch (error) {
       console.error('Error updating sent_to_doordash:', error);
     }

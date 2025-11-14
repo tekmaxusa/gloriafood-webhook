@@ -21,6 +21,7 @@ export interface Order {
   sent_to_doordash?: number;
   doordash_order_id?: string;
   doordash_sent_at?: string;
+  doordash_tracking_url?: string;
 }
 
 interface MySQLConfig {
@@ -94,6 +95,7 @@ export class OrderDatabaseMySQL {
           sent_to_doordash TINYINT(1) DEFAULT 0,
           doordash_order_id VARCHAR(255),
           doordash_sent_at DATETIME,
+          doordash_tracking_url TEXT,
           INDEX idx_gloriafood_order_id (gloriafood_order_id),
           INDEX idx_store_id (store_id),
           INDEX idx_status (status),
@@ -196,17 +198,18 @@ export class OrderDatabaseMySQL {
     }
   }
 
-  async markOrderSentToDoorDash(gloriafoodOrderId: string, doordashOrderId?: string): Promise<void> {
+  async markOrderSentToDoorDash(gloriafoodOrderId: string, doordashOrderId?: string, trackingUrl?: string): Promise<void> {
     try {
       const connection = await this.pool.getConnection();
       await connection.query(
         `UPDATE orders
          SET sent_to_doordash = 1,
              doordash_order_id = COALESCE(?, doordash_order_id),
+             doordash_tracking_url = COALESCE(?, doordash_tracking_url),
              doordash_sent_at = NOW(),
              updated_at = NOW()
          WHERE gloriafood_order_id = ?`,
-        [doordashOrderId || null, gloriafoodOrderId]
+        [doordashOrderId || null, trackingUrl || null, gloriafoodOrderId]
       );
       connection.release();
     } catch (error) {

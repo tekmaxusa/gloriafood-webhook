@@ -359,11 +359,6 @@ class GloriaFoodWebhookServer {
                   console.log(chalk.blue(`🔍 Response status: ${resp.status || 'NONE'}`));
                 }
                 
-                // Mark as sent if call succeeded
-                if (resp && (this.database as any).markOrderSentToDoorDash) {
-                  try { await (this.database as any).markOrderSentToDoorDash(orderId.toString(), resp.id); } catch {}
-                }
-                
                 if (resp && resp.id) {
                   console.log(chalk.green(`✅ Order sent to DoorDash successfully`));
                   console.log(chalk.gray(`   DoorDash Delivery ID: ${resp.id}`));
@@ -404,6 +399,13 @@ class GloriaFoodWebhookServer {
                     console.log(chalk.cyan(`   Tracking URL: ${trackingUrl}`));
                   } else {
                     console.log(chalk.yellow(`   ⚠️  Tracking URL not available yet (may be generated later by DoorDash)`));
+                  }
+                  
+                  // Mark as sent and store tracking URL if call succeeded
+                  if ((this.database as any).markOrderSentToDoorDash) {
+                    try { 
+                      await this.handleAsync((this.database as any).markOrderSentToDoorDash(orderId.toString(), resp.id, trackingUrl)); 
+                    } catch {}
                   }
                 } else {
                   console.log(chalk.yellow(`   ⚠️  DoorDash response missing ID: ${JSON.stringify(resp)}`));
@@ -430,10 +432,6 @@ class GloriaFoodWebhookServer {
                   console.log(chalk.blue(`🔍 Response status: ${resp.status || 'NONE'}`));
                 }
                 
-                if (resp && (this.database as any).markOrderSentToDoorDash) {
-                  try { await (this.database as any).markOrderSentToDoorDash(orderId.toString(), resp.id); } catch {}
-                }
-                
                 if (resp && resp.id) {
                   console.log(chalk.green(`✅ Order sent to DoorDash successfully`));
                   console.log(chalk.gray(`   DoorDash Delivery ID: ${resp.id}`));
@@ -474,6 +472,13 @@ class GloriaFoodWebhookServer {
                     console.log(chalk.cyan(`   Tracking URL: ${trackingUrl}`));
                   } else {
                     console.log(chalk.yellow(`   ⚠️  Tracking URL not available yet (may be generated later by DoorDash)`));
+                  }
+                  
+                  // Mark as sent and store tracking URL if call succeeded
+                  if ((this.database as any).markOrderSentToDoorDash) {
+                    try { 
+                      await this.handleAsync((this.database as any).markOrderSentToDoorDash(orderId.toString(), resp.id, trackingUrl)); 
+                    } catch {}
                   }
                 } else {
                   console.log(chalk.yellow(`   ⚠️  DoorDash response missing ID: ${JSON.stringify(resp)}`));
