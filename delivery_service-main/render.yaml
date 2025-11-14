@@ -10,14 +10,14 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 10000
+      # Note: PORT is automatically set by Render, no need to specify
       - key: NODE_VERSION
         value: 20.18.0
     healthCheckPath: /health
-    # Note: Add these environment variables in Render Dashboard:
+    # IMPORTANT: Add these environment variables in Render Dashboard:
     # GLORIAFOOD_API_KEY=your_api_key_here
     # GLORIAFOOD_STORE_ID=your_store_id_here
     # (Optional) DB_TYPE=mysql
     # (Optional) DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
+    # (Optional) DOORDASH_DEVELOPER_ID, DOORDASH_KEY_ID, DOORDASH_SIGNING_SECRET (for DoorDash integration)
 

@@ -81,7 +81,7 @@ class GloriaFoodWebhookServer {
   /**
    * Send order to DoorDash (if enabled)
    */
-  private async sendOrderToDoorDash(orderData: any): Promise<{ id?: string; status?: string; tracking_url?: string } | null> {
+  private async sendOrderToDoorDash(orderData: any): Promise<{ id?: string; external_delivery_id?: string; status?: string; tracking_url?: string } | null> {
     if (!this.doorDashClient) {
       return null; // DoorDash not configured
     }
@@ -100,7 +100,12 @@ class GloriaFoodWebhookServer {
       // Send to DoorDash Drive
       const response = await this.doorDashClient.createDriveDelivery(drivePayload);
 
-      return { id: response.id, status: response.status, tracking_url: response.tracking_url };
+      return { 
+        id: response.id, 
+        external_delivery_id: response.external_delivery_id,
+        status: response.status, 
+        tracking_url: response.tracking_url 
+      };
     } catch (error: any) {
       // Log error but don't fail the webhook
       console.error(chalk.red(`❌ Failed to send order to DoorDash: ${error.message}`));
@@ -115,24 +120,14 @@ class GloriaFoodWebhookServer {
     // Also parse URL-encoded bodies (some webhooks use this)
     this.app.use(express.urlencoded({ extended: true }));
     
-    // Request logging
+    // Request logging - minimal
     this.app.use((req, res, next) => {
-      const timestamp = new Date().toISOString();
-      console.log(chalk.cyan(`\n📨 [${timestamp}] ${req.method} ${req.path}`));
       if (req.method === 'POST' && req.path === this.config.webhookPath) {
+        const timestamp = new Date().toISOString();
+        console.log(chalk.cyan(`\n📨 [${timestamp}] POST ${req.path}`));
         console.log(chalk.yellow(`   🔔 WEBHOOK REQUEST DETECTED!`));
         console.log(chalk.gray(`   Content-Type: ${req.headers['content-type'] || 'N/A'}`));
         console.log(chalk.gray(`   Body size: ${JSON.stringify(req.body || {}).length} chars`));
-        console.log(chalk.gray(`   Body keys: ${Object.keys(req.body || {}).join(', ') || 'NONE'}`));
-        
-        // Log raw body if empty (for debugging)
-        if (!req.body || Object.keys(req.body).length === 0) {
-          console.log(chalk.yellow(`   ⚠️  Empty body detected - checking raw body...`));
-          // Log query params too
-          if (Object.keys(req.query).length > 0) {
-            console.log(chalk.gray(`   Query params: ${JSON.stringify(req.query)}`));
-          }
-        }
       }
       next();
     });
@@ -245,74 +240,8 @@ class GloriaFoodWebhookServer {
           });
         }
 
-        // Debug: Log webhook payload structure for troubleshooting
-        console.log(chalk.gray('\n📋 Webhook Payload Structure:'));
-        console.log(chalk.gray(`   Top-level keys: ${Object.keys(orderData).slice(0, 20).join(', ')}`));
-        if (orderData.client) {
-          console.log(chalk.gray(`   client keys: ${Object.keys(orderData.client).join(', ')}`));
-          if ((orderData.client as any).name) console.log(chalk.gray(`   client.name: "${(orderData.client as any).name}"`));
-          if ((orderData.client as any).first_name) console.log(chalk.gray(`   client.first_name: "${(orderData.client as any).first_name}"`));
-          if ((orderData.client as any).last_name) console.log(chalk.gray(`   client.last_name: "${(orderData.client as any).last_name}"`));
-          if ((orderData.client as any).phone) console.log(chalk.gray(`   client.phone: "${(orderData.client as any).phone}"`));
-          if ((orderData.client as any).email) console.log(chalk.gray(`   client.email: "${(orderData.client as any).email}"`));
-        }
-        if (orderData.customer) {
-          console.log(chalk.gray(`   customer keys: ${Object.keys(orderData.customer).join(', ')}`));
-        }
-        if (orderData.delivery) {
-          console.log(chalk.gray(`   delivery keys: ${Object.keys(orderData.delivery).join(', ')}`));
-          if (orderData.delivery.address) {
-            console.log(chalk.gray(`   delivery.address: ${JSON.stringify(orderData.delivery.address)}`));
-          }
-        }
-        // Log full payload to see actual structure - print more to find customer data
-        const fullPayload = JSON.stringify(orderData, null, 2);
-        console.log(chalk.blue('\n📄 FULL ORDER PAYLOAD:'));
-        console.log(chalk.gray(fullPayload.substring(0, 2000) + (fullPayload.length > 2000 ? '...' : '')));
-        
-        // Check for common customer/delivery fields that might be in different locations
-        console.log(chalk.blue('\n🔍 Checking for customer/delivery data in various locations:'));
-        if (orderData.billing_details) {
-          console.log(chalk.gray(`   billing_details: ${JSON.stringify(orderData.billing_details)}`));
-        }
-        if (orderData.client_info) {
-          console.log(chalk.gray(`   client_info: ${JSON.stringify(orderData.client_info)}`));
-        }
-        if (orderData.customer_info) {
-          console.log(chalk.gray(`   customer_info: ${JSON.stringify(orderData.customer_info)}`));
-        }
-        if (orderData.delivery_info) {
-          console.log(chalk.gray(`   delivery_info: ${JSON.stringify(orderData.delivery_info)}`));
-        }
-        if (orderData.shipping_address) {
-          console.log(chalk.gray(`   shipping_address: ${JSON.stringify(orderData.shipping_address)}`));
-        }
-        if (orderData.address) {
-          console.log(chalk.gray(`   address: ${JSON.stringify(orderData.address)}`));
-        }
-        
-        // Search for common customer field names in the entire object
-        const searchForField = (obj: any, fieldNames: string[], path = ''): any => {
-          if (!obj || typeof obj !== 'object') return null;
-          for (const key in obj) {
-            const currentPath = path ? `${path}.${key}` : key;
-            const value = obj[key];
-            if (fieldNames.some(fn => key.toLowerCase().includes(fn.toLowerCase()))) {
-              console.log(chalk.green(`   ✓ Found potential customer field: ${currentPath} = ${JSON.stringify(value)}`));
-            }
-            if (typeof value === 'object' && value !== null) {
-              searchForField(value, fieldNames, currentPath);
-            }
-          }
-          return null;
-        };
-        
-        console.log(chalk.blue('\n🔎 Deep search for customer-related fields:'));
-        searchForField(orderData, ['name', 'first_name', 'last_name', 'phone', 'email', 'customer', 'client', 'address', 'delivery', 'street', 'city']);
-
         // Log received order
         const orderId = orderData.id || orderData.order_id || 'unknown';
-        console.log(chalk.cyan(`\n📥 Received webhook for order: ${orderId}`));
 
         // Determine if this is a new order BEFORE saving
         const existingBefore = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId.toString()));
@@ -332,8 +261,7 @@ class GloriaFoodWebhookServer {
           const isDeliveryOrder = orderType === 'delivery';
           
           if (isNew) {
-            console.log(chalk.green(`✅ New order stored in database: #${orderId}`));
-            await this.displayOrder(savedOrder, true);
+            await this.displayOrder(savedOrder, true, orderData);
 
             // AUTOMATICALLY send to DoorDash for ALL new delivery orders (regardless of status)
             if (isDeliveryOrder) {
@@ -347,16 +275,25 @@ class GloriaFoodWebhookServer {
                 if (resp && resp.id) {
                   console.log(chalk.green(`✅ Order sent to DoorDash successfully`));
                   console.log(chalk.gray(`   DoorDash Delivery ID: ${resp.id}`));
+                  if (resp.external_delivery_id) {
+                    console.log(chalk.gray(`   External Delivery ID: ${resp.external_delivery_id}`));
+                  }
                   if (resp.status) {
                     console.log(chalk.gray(`   Status: ${resp.status}`));
                   }
-                  if (resp.tracking_url) {
-                    console.log(chalk.gray(`   Tracking URL: ${resp.tracking_url}`));
+                  // Always try to get tracking URL - fetch from DoorDash if not in response
+                  let trackingUrl = resp.tracking_url;
+                  if (!trackingUrl && resp.id && this.doorDashClient) {
+                    try {
+                      const statusResp = await this.doorDashClient.getOrderStatus(resp.id);
+                      trackingUrl = statusResp.tracking_url;
+                    } catch (e) {
+                      // Ignore errors fetching status
+                    }
                   }
-                  
-                  // Show rider dispatch message
-                  console.log(chalk.green(`🏍️  Rider is being dispatched by DoorDash...`));
-                  console.log(chalk.gray(`   DoorDash will automatically assign a rider for this delivery`));
+                  if (trackingUrl) {
+                    console.log(chalk.cyan(`   Tracking URL: ${trackingUrl}`));
+                  }
                 }
               }).catch((error: any)=>{
                 console.error(chalk.red(`❌ Failed to send order to DoorDash: ${error.message || 'Unknown error'}`));
@@ -364,6 +301,8 @@ class GloriaFoodWebhookServer {
             }
           } else {
             console.log(chalk.blue(`🔄 Order updated in database: #${orderId}`));
+            // Display updated order information
+            await this.displayOrder(savedOrder, false, orderData);
 
             // If it's a delivery order and not yet sent, send to DoorDash
             // This handles cases where order type changes to delivery or status changes
@@ -377,16 +316,25 @@ class GloriaFoodWebhookServer {
                 if (resp && resp.id) {
                   console.log(chalk.green(`✅ Order sent to DoorDash successfully`));
                   console.log(chalk.gray(`   DoorDash Delivery ID: ${resp.id}`));
+                  if (resp.external_delivery_id) {
+                    console.log(chalk.gray(`   External Delivery ID: ${resp.external_delivery_id}`));
+                  }
                   if (resp.status) {
                     console.log(chalk.gray(`   Status: ${resp.status}`));
                   }
-                  if (resp.tracking_url) {
-                    console.log(chalk.gray(`   Tracking URL: ${resp.tracking_url}`));
+                  // Always try to get tracking URL - fetch from DoorDash if not in response
+                  let trackingUrl = resp.tracking_url;
+                  if (!trackingUrl && resp.id && this.doorDashClient) {
+                    try {
+                      const statusResp = await this.doorDashClient.getOrderStatus(resp.id);
+                      trackingUrl = statusResp.tracking_url;
+                    } catch (e) {
+                      // Ignore errors fetching status
+                    }
                   }
-                  
-                  // Show rider dispatch message
-                  console.log(chalk.green(`🏍️  Rider is being dispatched by DoorDash...`));
-                  console.log(chalk.gray(`   DoorDash will automatically assign a rider for this delivery`));
+                  if (trackingUrl) {
+                    console.log(chalk.cyan(`   Tracking URL: ${trackingUrl}`));
+                  }
                 }
               }).catch((error: any)=>{
                 console.error(chalk.red(`❌ Failed to send order to DoorDash: ${error.message || 'Unknown error'}`));
@@ -638,165 +586,289 @@ class GloriaFoodWebhookServer {
     return null;
   }
 
-  private async displayOrder(order: Order, isNew: boolean = false): Promise<void> {
+  private async displayOrder(order: Order, isNew: boolean = false, originalOrderData?: any): Promise<void> {
     const prefix = isNew ? chalk.green('🆕 NEW ORDER') : chalk.blue('📦 ORDER');
     
-    // Parse raw_data to extract additional customer details
-    let rawData: any = null;
-    try {
-      rawData = JSON.parse(order.raw_data || '{}');
-    } catch (e) {
-      // Ignore parsing errors
+    // Use original order data if provided (more complete), otherwise parse from raw_data
+    let rawData: any = originalOrderData || null;
+    if (!rawData) {
+      try {
+        rawData = JSON.parse(order.raw_data || '{}');
+      } catch (e) {
+        // Ignore parsing errors
+      }
     }
     
     // Extract customer information from multiple sources
-    let customerName = order.customer_name;
-    let customerPhone = order.customer_phone || '';
-    let customerEmail = order.customer_email || '';
-    let deliveryAddress = order.delivery_address || '';
+    // Always prioritize rawData (originalOrderData) over database values when available
+    let customerName = '';
+    let customerPhone = '';
+    let customerEmail = '';
+    let deliveryAddress = '';
     
     if (rawData) {
-      // Extract customer name - try multiple paths
-      if (!customerName || customerName === 'Unknown') {
-        if (rawData.client) {
-          if (rawData.client.first_name || rawData.client.last_name) {
-            const name = `${rawData.client.first_name || ''} ${rawData.client.last_name || ''}`.trim();
-            if (name) customerName = name;
-          }
-          if (!customerName || customerName === 'Unknown') {
-            if (rawData.client.name) customerName = rawData.client.name;
-            if (rawData.client.full_name) customerName = rawData.client.full_name;
-          }
+      // Extract customer name - try root-level client_* fields FIRST (GloriaFood format)
+      // Try root-level client_* fields (most common in GloriaFood)
+      if (rawData.client_first_name || rawData.client_last_name) {
+        customerName = `${rawData.client_first_name || ''} ${rawData.client_last_name || ''}`.trim();
+      }
+      if (!customerName && rawData.client_name) {
+        customerName = String(rawData.client_name).trim();
+      }
+      // Try nested client object
+      if (!customerName && rawData.client) {
+        if (rawData.client.first_name || rawData.client.last_name) {
+          customerName = `${rawData.client.first_name || ''} ${rawData.client.last_name || ''}`.trim();
         }
-        if ((!customerName || customerName === 'Unknown') && rawData.customer) {
-          if (rawData.customer.name) customerName = rawData.customer.name;
-          else if (rawData.customer.first_name || rawData.customer.last_name) {
-            const name = `${rawData.customer.first_name || ''} ${rawData.customer.last_name || ''}`.trim();
-            if (name) customerName = name;
-          }
-          if (rawData.customer.full_name) customerName = rawData.customer.full_name;
-        }
-        if ((!customerName || customerName === 'Unknown') && rawData.customer_name) {
-          customerName = rawData.customer_name;
-        }
-        if ((!customerName || customerName === 'Unknown') && rawData.name) {
-          customerName = rawData.name;
+        if (!customerName) {
+          if (rawData.client.name) customerName = rawData.client.name;
+          if (!customerName && rawData.client.full_name) customerName = rawData.client.full_name;
         }
       }
-      
-      // Extract customer phone - try multiple paths
-      if (!customerPhone) {
-        customerPhone = rawData.client?.phone || 
-                       rawData.client?.phone_number || 
-                       rawData.client?.mobile ||
-                       rawData.customer?.phone || 
-                       rawData.customer?.phone_number || 
-                       rawData.customer?.mobile ||
-                       rawData.customer_phone || 
-                       rawData.phone || 
-                       rawData.phone_number || 
-                       rawData.mobile || '';
+      if (!customerName && rawData.customer) {
+        if (rawData.customer.name) {
+          customerName = rawData.customer.name;
+        } else if (rawData.customer.first_name || rawData.customer.last_name) {
+          customerName = `${rawData.customer.first_name || ''} ${rawData.customer.last_name || ''}`.trim();
+        }
+        if (!customerName && rawData.customer.full_name) customerName = rawData.customer.full_name;
+      }
+      if (!customerName && rawData.customer_name) {
+        customerName = rawData.customer_name;
+      }
+      if (!customerName && rawData.name) {
+        customerName = rawData.name;
       }
       
-      // Extract customer email - try multiple paths
-      if (!customerEmail) {
-        customerEmail = rawData.client?.email || 
-                       rawData.customer?.email || 
-                       rawData.customer_email || 
-                       rawData.email || '';
-      }
+      // Extract customer phone - try root-level client_* fields FIRST
+      customerPhone = rawData.client_phone || 
+                     rawData.client_phone_number || 
+                     rawData.client?.phone || 
+                     rawData.client?.phone_number || 
+                     rawData.client?.mobile ||
+                     rawData.customer?.phone || 
+                     rawData.customer?.phone_number || 
+                     rawData.customer?.mobile ||
+                     rawData.customer_phone || 
+                     rawData.phone || 
+                     rawData.phone_number || 
+                     rawData.mobile || '';
       
-      // Extract delivery address - try multiple paths
-      if (!deliveryAddress) {
-        // Try delivery.address object (structured address)
-        if (rawData.delivery?.address) {
-          const addr = rawData.delivery.address;
-          const addressParts = [
-            addr.street || addr.address_line_1 || addr.address || addr.line1 || addr.line_1,
-            addr.address_line_2 || addr.line2 || addr.line_2,
-            addr.city || addr.locality,
-            addr.state || addr.province || addr.region,
-            addr.zip || addr.postal_code || addr.postcode,
-            addr.country
-          ].filter(Boolean);
-          if (addressParts.length > 0) {
-            deliveryAddress = addressParts.join(', ');
-          }
+      // Extract customer email - try root-level client_* fields FIRST
+      customerEmail = rawData.client_email || 
+                     rawData.client?.email || 
+                     rawData.customer?.email || 
+                     rawData.customer_email || 
+                     rawData.email || '';
+      
+      // Extract delivery address - try root-level client_address FIRST
+      // Try root-level client_address (GloriaFood format)
+      if (rawData.client_address) {
+        deliveryAddress = String(rawData.client_address).trim();
+      }
+      // Try client_address_parts (structured address)
+      if (!deliveryAddress && rawData.client_address_parts) {
+        const parts = rawData.client_address_parts;
+        const addressParts = [
+          parts.street || parts.address || parts.address_line_1,
+          parts.more_address || parts.address_line_2,
+          parts.city || parts.locality,
+          parts.state || parts.province || parts.region,
+          parts.zip || parts.postal_code || parts.postcode,
+          parts.country
+        ].filter(Boolean);
+        if (addressParts.length > 0) {
+          deliveryAddress = addressParts.join(', ');
         }
-        // Try delivery object with direct fields
-        if (!deliveryAddress && (rawData.delivery?.street || rawData.delivery?.city)) {
-          const addr = rawData.delivery;
-          const addressParts = [
-            addr.street || addr.address || addr.address_line_1,
-            addr.city,
-            addr.state || addr.province,
-            addr.zip || addr.postal_code,
-            addr.country
-          ].filter(Boolean);
-          if (addressParts.length > 0) {
-            deliveryAddress = addressParts.join(', ');
-          }
+      }
+      // Try delivery.address object (structured address)
+      if (!deliveryAddress && rawData.delivery?.address) {
+        const addr = rawData.delivery.address;
+        const addressParts = [
+          addr.street || addr.address_line_1 || addr.address || addr.line1 || addr.line_1,
+          addr.address_line_2 || addr.line2 || addr.line_2,
+          addr.city || addr.locality,
+          addr.state || addr.province || addr.region,
+          addr.zip || addr.postal_code || addr.postcode,
+          addr.country
+        ].filter(Boolean);
+        if (addressParts.length > 0) {
+          deliveryAddress = addressParts.join(', ');
         }
-        // Try root level fields
-        if (!deliveryAddress && rawData.delivery_address) {
-          deliveryAddress = rawData.delivery_address;
+      }
+      // Try delivery object with direct fields
+      if (!deliveryAddress && (rawData.delivery?.street || rawData.delivery?.city)) {
+        const addr = rawData.delivery;
+        const addressParts = [
+          addr.street || addr.address || addr.address_line_1,
+          addr.city,
+          addr.state || addr.province,
+          addr.zip || addr.postal_code,
+          addr.country
+        ].filter(Boolean);
+        if (addressParts.length > 0) {
+          deliveryAddress = addressParts.join(', ');
         }
-        if (!deliveryAddress && rawData.address) {
-          deliveryAddress = rawData.address;
-        }
-        if (!deliveryAddress && rawData.shipping_address) {
-          deliveryAddress = rawData.shipping_address;
-        }
+      }
+      // Try root level fields
+      if (!deliveryAddress && rawData.delivery_address) {
+        deliveryAddress = rawData.delivery_address;
+      }
+      if (!deliveryAddress && rawData.address) {
+        deliveryAddress = rawData.address;
+      }
+      if (!deliveryAddress && rawData.shipping_address) {
+        deliveryAddress = rawData.shipping_address;
       }
     }
+    
+    // Fallback to database values if rawData extraction failed
+    if (!customerName) customerName = order.customer_name || 'Unknown';
+    if (!customerPhone) customerPhone = order.customer_phone || '';
+    if (!customerEmail) customerEmail = order.customer_email || '';
+    if (!deliveryAddress) deliveryAddress = order.delivery_address || '';
     
     // Convert total_price to number (MySQL returns DECIMAL as string)
     const totalPrice = typeof order.total_price === 'string' 
       ? parseFloat(order.total_price) 
       : (order.total_price || 0);
     
+    // Extract additional delivery info from rawData
+    let deliveryZone = '';
+    let coordinates = '';
+    if (rawData) {
+      // Try root-level delivery_zone_name first (GloriaFood format)
+      deliveryZone = rawData.delivery_zone_name || 
+                     rawData.delivery_zone || 
+                     rawData.delivery?.zone || 
+                     rawData.zone || '';
+      // Try root-level latitude/longitude first (GloriaFood format)
+      if (rawData.latitude && rawData.longitude) {
+        coordinates = `${rawData.latitude}, ${rawData.longitude}`;
+      } else if (rawData.lat && rawData.lng) {
+        coordinates = `${rawData.lat}, ${rawData.lng}`;
+      } else if (rawData.delivery?.coordinates) {
+        const coords = rawData.delivery.coordinates;
+        if (coords.lat && coords.lng) {
+          coordinates = `${coords.lat}, ${coords.lng}`;
+        }
+      }
+    }
+    
     console.log(`\n${prefix} ${chalk.bold(`#${order.gloriafood_order_id}`)}`);
-    console.log(chalk.gray('  ──────────────────────────────────────────'));
+    console.log(chalk.gray('  ════════════════════════════════════════════════════════════'));
+    
+    // Order Information Section
+    console.log(chalk.yellow.bold('\n  📋 ORDER INFORMATION:'));
+    console.log(`    ${chalk.bold('Order ID:')} ${order.gloriafood_order_id}`);
+    console.log(`    ${chalk.bold('Internal ID:')} ${order.id || 'N/A'}`);
+    console.log(`    ${chalk.bold('Store ID:')} ${order.store_id || 'N/A'}`);
+    console.log(`    ${chalk.bold('Status:')} ${this.formatStatus(order.status)}`);
+    console.log(`    ${chalk.bold('Type:')} ${order.order_type || 'N/A'}`);
+    console.log(`    ${chalk.bold('Total:')} ${order.currency || 'USD'} ${totalPrice.toFixed(2)}`);
     
     // Customer Information Section
     console.log(chalk.yellow.bold('\n  👤 CUSTOMER INFORMATION:'));
-    console.log(`    ${chalk.bold('Name:')} ${customerName || 'N/A'}`);
+    console.log(`    ${chalk.bold('Name:')} ${customerName || 'Unknown'}`);
     console.log(`    ${chalk.bold('Phone:')} ${customerPhone || 'N/A'}`);
     console.log(`    ${chalk.bold('Email:')} ${customerEmail || 'N/A'}`);
     
     // Delivery Information Section
     console.log(chalk.yellow.bold('\n  📍 DELIVERY INFORMATION:'));
+    if (deliveryZone) {
+      console.log(`    ${chalk.bold('Delivery Zone:')} ${deliveryZone}`);
+    }
+    if (coordinates) {
+      console.log(`    ${chalk.bold('Coordinates:')} ${coordinates}`);
+    }
     if (deliveryAddress) {
       console.log(`    ${chalk.bold('Address:')} ${deliveryAddress}`);
     } else {
       console.log(`    ${chalk.gray('No delivery address available')}`);
     }
-
-    // Order Information
-    console.log(chalk.yellow.bold('\n  📋 ORDER INFORMATION:'));
-    console.log(`    ${chalk.bold('Total:')} ${order.currency || 'USD'} ${totalPrice.toFixed(2)}`);
-    console.log(`    ${chalk.bold('Status:')} ${this.formatStatus(order.status)}`);
-    console.log(`    ${chalk.bold('Type:')} ${order.order_type || 'N/A'}`);
-    console.log(`    ${chalk.bold('Received:')} ${new Date(order.fetched_at).toLocaleString()}`);
     
-    // Display items
+    // DoorDash Information (if sent)
+    if ((order as any).doordash_order_id || (order as any).sent_to_doordash) {
+      console.log(chalk.yellow.bold('\n  🚚 DOORDASH INFORMATION:'));
+      if ((order as any).doordash_order_id) {
+        console.log(`    ${chalk.bold('DoorDash Delivery ID:')} ${(order as any).doordash_order_id}`);
+      }
+      if ((order as any).doordash_sent_at) {
+        console.log(`    ${chalk.bold('Sent to DoorDash:')} ${new Date((order as any).doordash_sent_at).toLocaleString()}`);
+      }
+      // Try to get tracking URL from database or fetch it
+      if ((order as any).doordash_order_id && this.doorDashClient) {
+        try {
+          const ddStatus = await this.doorDashClient.getOrderStatus((order as any).doordash_order_id);
+          if (ddStatus.tracking_url) {
+            console.log(`    ${chalk.bold('Tracking URL:')} ${chalk.blue(ddStatus.tracking_url)}`);
+          }
+          if (ddStatus.status) {
+            console.log(`    ${chalk.bold('Delivery Status:')} ${ddStatus.status}`);
+          }
+        } catch (e) {
+          // Ignore errors fetching DoorDash status
+        }
+      }
+    }
+    
+    // Display items with detailed breakdown
     try {
       const items = JSON.parse(order.items || '[]');
       if (Array.isArray(items) && items.length > 0) {
         console.log(chalk.yellow.bold('\n  🛒 ORDER ITEMS:'));
+        let itemsTotal = 0;
         items.forEach((item: any, index: number) => {
-          const name = item.name || item.product_name || item.title || 'Unknown Item';
+          const name = item.name || item.product_name || item.title || item.item_name || 'Unknown Item';
           const quantity = item.quantity || 1;
-          const itemPrice = parseFloat(item.price || item.unit_price || 0);
-          const subtotal = itemPrice * quantity;
-          console.log(`    ${index + 1}. ${name} x${quantity} - ${order.currency || 'USD'} ${itemPrice.toFixed(2)} (Total: ${order.currency || 'USD'} ${subtotal.toFixed(2)})`);
+          const itemPrice = parseFloat(item.price || item.unit_price || item.total_price || 0);
+          const subtotal = quantity * itemPrice;
+          itemsTotal += subtotal;
+          
+          const currency = order.currency || 'USD';
+          console.log(`    ${index + 1}. ${name} x${quantity} - ${currency} ${itemPrice.toFixed(2)} (Total: ${currency} ${subtotal.toFixed(2)})`);
+          
+          // Show variations/options
+          if (item.variations || item.options) {
+            const variations = item.variations || item.options || [];
+            variations.forEach((opt: any) => {
+              const optName = opt.name || opt.title || opt.option_name || '';
+              if (optName) {
+                console.log(`       ${chalk.gray(`  - ${optName}`)}`);
+              }
+            });
+          }
+          
+          // Show item notes
+          if (item.note || item.special_instructions || item.comment) {
+            const note = item.note || item.special_instructions || item.comment;
+            console.log(`       ${chalk.gray(`  Note: ${note}`)}`);
+          }
         });
+        
+        // Show subtotal, delivery fee, and total
+        const deliveryFee = totalPrice - itemsTotal;
+        if (deliveryFee > 0 && Math.abs(deliveryFee) > 0.01) {
+          console.log(`\n    ${chalk.bold('Subtotal:')} ${order.currency || 'USD'} ${itemsTotal.toFixed(2)}`);
+          console.log(`    ${chalk.bold('Delivery Fee:')} ${order.currency || 'USD'} ${deliveryFee.toFixed(2)}`);
+        }
+        console.log(`    ${chalk.bold('Total:')} ${order.currency || 'USD'} ${totalPrice.toFixed(2)}`);
+      } else {
+        console.log(chalk.yellow.bold('\n  🛒 ORDER ITEMS:'));
+        console.log(`    ${chalk.gray('No items data available')}`);
       }
     } catch (e) {
-      // Ignore parsing errors
+      console.log(chalk.yellow.bold('\n  🛒 ORDER ITEMS:'));
+      console.log(`    ${chalk.gray('Error parsing items data')}`);
     }
     
-    console.log(chalk.gray('\n  ──────────────────────────────────────────'));
+    // Timestamps Section
+    console.log(chalk.yellow.bold('\n  ⏰ TIMESTAMPS:'));
+    console.log(`    ${chalk.bold('Created:')} ${new Date(order.created_at).toLocaleString()}`);
+    console.log(`    ${chalk.bold('Updated:')} ${new Date(order.updated_at).toLocaleString()}`);
+    console.log(`    ${chalk.bold('Received:')} ${new Date(order.fetched_at).toLocaleString()}`);
+    
+    console.log(chalk.gray('\n  ════════════════════════════════════════════════════════════'));
     
     // Display statistics
     const totalOrders = await this.handleAsync(this.database.getOrderCount());
@@ -842,9 +914,19 @@ class GloriaFoodWebhookServer {
       console.log(chalk.gray(`   • Summary: http://localhost:${this.config.port}/summary`));
       console.log(chalk.gray(`   • Stats: http://localhost:${this.config.port}/stats`));
       console.log(chalk.gray(`   • DoorDash Status: http://localhost:${this.config.port}/doordash/status/:orderId\n`));
-      console.log(chalk.yellow(`⚠ Configure GloriaFood to send webhooks to: https://tekmaxllc.com/webhook`));
-      console.log(chalk.yellow(`⚠ Make sure this server is accessible at that URL (use ngrok/tunnel for local dev)`));
-      console.log(chalk.gray(`   Example ngrok: ngrok http ${this.config.port}`));
+      // Show webhook URL based on environment
+      if (process.env.RENDER) {
+        // Running on Render
+        const renderUrl = process.env.RENDER_EXTERNAL_URL || 'https://your-app.onrender.com';
+        console.log(chalk.yellow(`⚠ Configure GloriaFood webhook URL to:`));
+        console.log(chalk.green(`   ${renderUrl}/webhook`));
+      } else {
+        // Running locally
+        console.log(chalk.yellow(`⚠ Configure GloriaFood to send webhooks to your public URL`));
+        console.log(chalk.yellow(`⚠ For local dev, use tunnel (cloudflared/ngrok):`));
+        console.log(chalk.gray(`   npx -y cloudflared tunnel --url http://localhost:${this.config.port}`));
+        console.log(chalk.gray(`   Then use the provided URL + /webhook`));
+      }
       console.log(chalk.yellow(`\n⚠ Note: If your GloriaFood doesn't support webhooks, use polling mode instead:`));
       console.log(chalk.green(`   npm run dev (polling mode - checks every 30 seconds)\n`));
     });

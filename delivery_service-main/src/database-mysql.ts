@@ -120,37 +120,10 @@ export class OrderDatabaseMySQL {
 
   async insertOrUpdateOrder(orderData: any): Promise<Order | null> {
     try {
-      // Debug: Log extraction results
       const customerName = this.extractCustomerName(orderData);
       const customerPhone = this.extractCustomerPhone(orderData);
       const customerEmail = this.extractCustomerEmail(orderData);
       const deliveryAddress = this.extractDeliveryAddress(orderData);
-      
-      console.log(chalk.blue('\n🔍 Data Extraction Results:'));
-      console.log(chalk.gray(`   Customer Name: "${customerName}"`));
-      console.log(chalk.gray(`   Customer Phone: "${customerPhone}"`));
-      console.log(chalk.gray(`   Customer Email: "${customerEmail}"`));
-      console.log(chalk.gray(`   Delivery Address: "${deliveryAddress}"`));
-      
-      // Debug: Show sample of orderData structure
-      console.log(chalk.blue('\n🔍 OrderData Structure:'));
-      console.log(chalk.gray(`   Keys: ${Object.keys(orderData).slice(0, 15).join(', ')}`));
-      if (orderData.client) {
-        console.log(chalk.gray(`   client exists with keys: ${Object.keys(orderData.client).join(', ')}`));
-        if (orderData.client.first_name) console.log(chalk.gray(`   client.first_name: "${orderData.client.first_name}"`));
-        if (orderData.client.last_name) console.log(chalk.gray(`   client.last_name: "${orderData.client.last_name}"`));
-        if (orderData.client.name) console.log(chalk.gray(`   client.name: "${orderData.client.name}"`));
-        if (orderData.client.phone) console.log(chalk.gray(`   client.phone: "${orderData.client.phone}"`));
-      }
-      if (orderData.customer) {
-        console.log(chalk.gray(`   customer exists with keys: ${Object.keys(orderData.customer).join(', ')}`));
-      }
-      if (orderData.delivery) {
-        console.log(chalk.gray(`   delivery exists with keys: ${Object.keys(orderData.delivery).join(', ')}`));
-        if (orderData.delivery.address) {
-          console.log(chalk.gray(`   delivery.address exists with keys: ${Object.keys(orderData.delivery.address).join(', ')}`));
-        }
-      }
       
       const order: Order = {
         id: '',
@@ -180,8 +153,14 @@ export class OrderDatabaseMySQL {
           status, order_type, items, raw_data, created_at, updated_at, fetched_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
+          customer_name = VALUES(customer_name),
+          customer_phone = VALUES(customer_phone),
+          customer_email = VALUES(customer_email),
+          delivery_address = VALUES(delivery_address),
           status = VALUES(status),
           total_price = VALUES(total_price),
+          order_type = VALUES(order_type),
+          items = VALUES(items),
           updated_at = VALUES(updated_at),
           fetched_at = VALUES(fetched_at),
           raw_data = VALUES(raw_data)
@@ -206,9 +185,6 @@ export class OrderDatabaseMySQL {
       connection.release();
       
       const savedOrder = await this.getOrderByGloriaFoodId(order.gloriafood_order_id);
-      if (savedOrder) {
-        console.log(`✅ Order saved to MySQL: ID ${savedOrder.id}, GloriaFood ID: ${order.gloriafood_order_id}`);
-      }
       return savedOrder;
     } catch (error: any) {
       console.error('❌ Error inserting order to MySQL:', error.message);
