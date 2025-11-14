@@ -26,7 +26,7 @@ Dapat mayroon ka na:
 1. **Pumunta sa Render Dashboard** → Your Service → **Settings**
 
 2. **Build & Deploy** section:
-   - **Build Command:** `npm ci && npm run build`
+   - **Build Command:** `npm install --production=false && npm run build`
    - (Palitan ang `npm install && npm run build`)
 
 3. **Click "Save Changes"**
@@ -81,7 +81,7 @@ Pagkatapos ng deployment:
 ### Option 2: Explicit build command
 I-update ang Build Command sa:
 ```
-NODE_VERSION=20.18.0 npm ci && npm run build
+NODE_VERSION=20.18.0 npm install --production=false && npm run build
 ```
 
 ### Option 3: Contact Render Support
@@ -93,7 +93,7 @@ Kung hindi pa rin gumana, contact Render support at sabihin na hindi gumagana an
 
 ✅ **Hindi mo kailangan ng Node version dropdown!**
 ✅ **Render ay automatic na magbabasa ng `package.json` engines field**
-✅ **I-update lang ang Build Command: `npm ci && npm run build`**
+✅ **I-update lang ang Build Command: `npm install --production=false && npm run build`**
 ✅ **I-commit at i-push ang changes**
 ✅ **Manual deploy**
 

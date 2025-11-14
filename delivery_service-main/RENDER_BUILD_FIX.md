@@ -11,7 +11,7 @@
 
 2. **I-update ang Build Command:**
    ```
-   npm ci && npm run build
+   npm install --production=false && npm run build
    ```
 
 3. **I-update ang Node Version:**
@@ -30,7 +30,7 @@
 
 Ang `render.yaml` ay na-update na para sa:
 - Node version: 20.18.0 (LTS)
-- Build command: `npm ci && npm run build`
+- Build command: `npm install --production=false && npm run build`
 
 Kung gumagamit ka ng `render.yaml`, automatic na ito.
 
@@ -41,7 +41,7 @@ Kung gumagamit ka ng `render.yaml`, automatic na ito.
 1. **Pumunta sa Service Settings**
 
 2. **Build & Deploy** section:
-   - **Build Command:** `npm ci && npm run build`
+   - **Build Command:** `npm install --production=false && npm run build`
    - **Node Version:** `20.18.0` (o piliin sa dropdown)
 
 3. **Environment Variables:**

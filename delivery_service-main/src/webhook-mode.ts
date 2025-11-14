@@ -41,6 +41,7 @@ class GloriaFoodWebhookServer {
     }
     
     this.database = DatabaseFactory.createDatabase();
+    // Setup middleware first (body parsing), then routes
     this.setupMiddleware();
     this.setupRoutes();
   }
@@ -80,7 +81,7 @@ class GloriaFoodWebhookServer {
   /**
    * Send order to DoorDash (if enabled)
    */
-  private async sendOrderToDoorDash(orderData: any): Promise<{ id?: string; status?: string } | null> {
+  private async sendOrderToDoorDash(orderData: any): Promise<{ id?: string; status?: string; tracking_url?: string } | null> {
     if (!this.doorDashClient) {
       return null; // DoorDash not configured
     }
@@ -93,27 +94,13 @@ class GloriaFoodWebhookServer {
     }
 
     try {
-      console.log(chalk.cyan('🚚 Sending order to DoorDash...'));
-      
       // Convert to DoorDash Drive delivery payload
       const drivePayload = this.doorDashClient.convertGloriaFoodToDrive(orderData);
 
       // Send to DoorDash Drive
       const response = await this.doorDashClient.createDriveDelivery(drivePayload);
 
-      console.log(chalk.green(`✅ Order sent to DoorDash successfully`));
-      console.log(chalk.gray(`   DoorDash Delivery ID: ${response.id ?? 'N/A'}`));
-      console.log(chalk.gray(`   External Delivery ID: ${response.external_delivery_id || drivePayload.external_delivery_id || 'N/A'}`));
-      console.log(chalk.gray(`   Status: ${response.status ?? 'N/A'}`));
-      if (response.tracking_url) {
-        console.log(chalk.gray(`   Tracking URL: ${response.tracking_url}`));
-      }
-      if (!response.id || !response.status) {
-        try {
-          console.log(chalk.gray(`   Raw: ${JSON.stringify((response as any).raw || {}, null, 2)}`));
-        } catch {}
-      }
-      return { id: response.id, status: response.status };
+      return { id: response.id, status: response.status, tracking_url: response.tracking_url };
     } catch (error: any) {
       // Log error but don't fail the webhook
       console.error(chalk.red(`❌ Failed to send order to DoorDash: ${error.message}`));
@@ -125,16 +112,27 @@ class GloriaFoodWebhookServer {
   private setupMiddleware(): void {
     // Parse JSON bodies
     this.app.use(express.json());
+    // Also parse URL-encoded bodies (some webhooks use this)
+    this.app.use(express.urlencoded({ extended: true }));
     
-    // Request logging - enhanced to catch all requests
+    // Request logging
     this.app.use((req, res, next) => {
       const timestamp = new Date().toISOString();
       console.log(chalk.cyan(`\n📨 [${timestamp}] ${req.method} ${req.path}`));
       if (req.method === 'POST' && req.path === this.config.webhookPath) {
         console.log(chalk.yellow(`   🔔 WEBHOOK REQUEST DETECTED!`));
-        console.log(chalk.gray(`   Content-Type: ${req.headers['content-type']}`));
+        console.log(chalk.gray(`   Content-Type: ${req.headers['content-type'] || 'N/A'}`));
         console.log(chalk.gray(`   Body size: ${JSON.stringify(req.body || {}).length} chars`));
         console.log(chalk.gray(`   Body keys: ${Object.keys(req.body || {}).join(', ') || 'NONE'}`));
+        
+        // Log raw body if empty (for debugging)
+        if (!req.body || Object.keys(req.body).length === 0) {
+          console.log(chalk.yellow(`   ⚠️  Empty body detected - checking raw body...`));
+          // Log query params too
+          if (Object.keys(req.query).length > 0) {
+            console.log(chalk.gray(`   Query params: ${JSON.stringify(req.query)}`));
+          }
+        }
       }
       next();
     });
@@ -201,12 +199,34 @@ class GloriaFoodWebhookServer {
         }
 
         // Extract order data from request
-        const orderData = this.extractOrderData(req.body);
+        // Try body first, then query params, then raw body
+        let orderData = this.extractOrderData(req.body);
+        
+        // If body is empty, try query params
+        if (!orderData && Object.keys(req.query).length > 0) {
+          console.log(chalk.yellow('   ⚠️  Body is empty, trying query params...'));
+          orderData = this.extractOrderData(req.query);
+        }
         
         if (!orderData) {
           console.warn(chalk.yellow('⚠ Invalid webhook payload - no order data found'));
-          console.log(chalk.gray('Raw request body keys:'), Object.keys(req.body || {}));
-          return res.status(400).json({ error: 'Invalid payload - no order data found' });
+          console.log(chalk.gray('   Request body keys:'), Object.keys(req.body || {}));
+          console.log(chalk.gray('   Request query keys:'), Object.keys(req.query || {}));
+          console.log(chalk.gray('   Content-Type:'), req.headers['content-type'] || 'N/A');
+          console.log(chalk.gray('   Raw body (first 500 chars):'), JSON.stringify(req.body || {}).substring(0, 500));
+          
+          // Still return 200 to prevent retries, but log the issue
+          return res.status(200).json({ 
+            success: false, 
+            error: 'Invalid payload - no order data found',
+            received: {
+              hasBody: !!req.body,
+              bodyKeys: Object.keys(req.body || {}),
+              hasQuery: Object.keys(req.query || {}).length > 0,
+              queryKeys: Object.keys(req.query || {}),
+              contentType: req.headers['content-type'] || 'N/A'
+            }
+          });
         }
 
         // Debug: Log webhook payload structure for troubleshooting
@@ -301,13 +321,30 @@ class GloriaFoodWebhookServer {
 
             // AUTOMATICALLY send to DoorDash for ALL new delivery orders (regardless of status)
             if (isDeliveryOrder) {
-              console.log(chalk.cyan('🚚 Auto-sending delivery order to DoorDash...'));
+              console.log(chalk.cyan('\n🚚 Sending order to DoorDash...'));
               await this.sendOrderToDoorDash(orderData).then(async (resp)=>{
                 // Mark as sent if call succeeded
                 if (resp && (this.database as any).markOrderSentToDoorDash) {
                   try { await (this.database as any).markOrderSentToDoorDash(orderId.toString(), resp.id); } catch {}
                 }
-              }).catch(()=>{});
+                
+                if (resp && resp.id) {
+                  console.log(chalk.green(`✅ Order sent to DoorDash successfully`));
+                  console.log(chalk.gray(`   DoorDash Delivery ID: ${resp.id}`));
+                  if (resp.status) {
+                    console.log(chalk.gray(`   Status: ${resp.status}`));
+                  }
+                  if (resp.tracking_url) {
+                    console.log(chalk.gray(`   Tracking URL: ${resp.tracking_url}`));
+                  }
+                  
+                  // Show rider dispatch message
+                  console.log(chalk.green(`🏍️  Rider is being dispatched by DoorDash...`));
+                  console.log(chalk.gray(`   DoorDash will automatically assign a rider for this delivery`));
+                }
+              }).catch((error: any)=>{
+                console.error(chalk.red(`❌ Failed to send order to DoorDash: ${error.message || 'Unknown error'}`));
+              });
             }
           } else {
             console.log(chalk.blue(`🔄 Order updated in database: #${orderId}`));
@@ -315,12 +352,29 @@ class GloriaFoodWebhookServer {
             // If it's a delivery order and not yet sent, send to DoorDash
             // This handles cases where order type changes to delivery or status changes
             if (isDeliveryOrder && wasNotSent) {
-              console.log(chalk.cyan('🚚 Auto-sending delivery order to DoorDash...'));
+              console.log(chalk.cyan('\n🚚 Sending order to DoorDash...'));
               await this.sendOrderToDoorDash(orderData).then(async (resp)=>{
                 if (resp && (this.database as any).markOrderSentToDoorDash) {
                   try { await (this.database as any).markOrderSentToDoorDash(orderId.toString(), resp.id); } catch {}
                 }
-              }).catch(()=>{});
+                
+                if (resp && resp.id) {
+                  console.log(chalk.green(`✅ Order sent to DoorDash successfully`));
+                  console.log(chalk.gray(`   DoorDash Delivery ID: ${resp.id}`));
+                  if (resp.status) {
+                    console.log(chalk.gray(`   Status: ${resp.status}`));
+                  }
+                  if (resp.tracking_url) {
+                    console.log(chalk.gray(`   Tracking URL: ${resp.tracking_url}`));
+                  }
+                  
+                  // Show rider dispatch message
+                  console.log(chalk.green(`🏍️  Rider is being dispatched by DoorDash...`));
+                  console.log(chalk.gray(`   DoorDash will automatically assign a rider for this delivery`));
+                }
+              }).catch((error: any)=>{
+                console.error(chalk.red(`❌ Failed to send order to DoorDash: ${error.message || 'Unknown error'}`));
+              });
             }
           }
         } else {
@@ -388,6 +442,35 @@ class GloriaFoodWebhookServer {
         res.json({ success: true, order });
       } catch (error: any) {
         res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Delete order endpoint
+    this.app.delete('/orders/:orderId', async (req: Request, res: Response) => {
+      try {
+        const orderId = req.params.orderId;
+        console.log(chalk.yellow(`🗑️  Attempting to delete order: #${orderId}`));
+        const deleted = await this.handleAsync(this.database.deleteOrder(orderId));
+        
+        if (deleted) {
+          console.log(chalk.green(`✅ Order deleted successfully: #${orderId}`));
+          res.json({ 
+            success: true, 
+            message: `Order #${orderId} deleted successfully` 
+          });
+        } else {
+          console.log(chalk.red(`❌ Order not found: #${orderId}`));
+          res.status(404).json({ 
+            success: false, 
+            error: 'Order not found' 
+          });
+        }
+      } catch (error: any) {
+        console.error(chalk.red(`❌ Error deleting order: ${error.message}`));
+        res.status(500).json({ 
+          success: false, 
+          error: error.message 
+        });
       }
     });
 
@@ -543,6 +626,11 @@ class GloriaFoodWebhookServer {
   }
 
   private extractOrderData(body: any): GloriaFoodOrder | null {
+    // Handle null/undefined body
+    if (!body) {
+      return null;
+    }
+    
     // Handle different possible webhook payload structures
     if (body.order) {
       return body.order;
