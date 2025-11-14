@@ -2,13 +2,17 @@ services:
   - type: web
     name: gloriafood-webhook
     env: node
-    buildCommand: npm install && npm run build
+    plan: free
+    region: singapore
+    buildCommand: npm ci && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 10000
+      - key: NODE_VERSION
+        value: 20.18.0
     healthCheckPath: /health
     # Note: Add these environment variables in Render Dashboard:
     # GLORIAFOOD_API_KEY=your_api_key_here

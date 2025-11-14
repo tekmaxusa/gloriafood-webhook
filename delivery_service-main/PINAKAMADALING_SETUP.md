@@ -61,7 +61,7 @@
       NODE_ENV=production
       ```
       
-      (Optional - kung may MySQL):
+      (Optional - kung may Cloud MySQL database):
       ```
       DB_TYPE=mysql
       DB_HOST=your_mysql_host
@@ -70,6 +70,15 @@
       DB_PASSWORD=your_password
       DB_NAME=gloriafood_orders
       ```
+      
+      **⚠️ IMPORTANT:**
+      - **XAMPP MySQL** ay para sa **LOCAL development lang** (localhost)
+      - **Render** ay hindi makaka-access sa local XAMPP
+      - **Para sa Render**, may 2 options:
+        1. **SQLite (RECOMMENDED - FREE, walang setup)** - Hindi mo na kailangan i-add ang MySQL variables
+        2. **Cloud MySQL** - Kailangan mo ng cloud database (Render Database, PlanetScale, etc.)
+      
+      **Simplest Option:** Huwag mo na i-add ang MySQL variables → Gagamitin nito ang SQLite (FREE, automatic)
 
    e. **Click "Create Web Service"**
 

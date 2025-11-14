@@ -14,10 +14,11 @@
     "view-orders": "ts-node view-orders.ts",
     "view-orders-status": "ts-node view-orders-status.ts",
     "create-dd": "ts-node create-dd-order.ts",
-    "postinstall": "npm run build"
+    "postinstall": "npm run build",
+    "render-build": "npm install --production=false && npm run build"
   },
   "engines": {
-    "node": ">=16.0.0",
+    "node": ">=18.0.0 <=20.x",
     "npm": ">=8.0.0"
   },
   "keywords": [
