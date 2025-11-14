@@ -1,0 +1,46 @@
+{
+  "name": "gloriafood-order-fetcher",
+  "version": "1.0.0",
+  "description": "TypeScript script to fetch orders from GloriaFood API and store in database",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/webhook-mode.js",
+    "dev": "ts-node src/index.ts",
+    "webhook": "ts-node src/webhook-mode.ts",
+    "webhook:prod": "npm run build && node dist/webhook-mode.js",
+    "watch": "ts-node --watch src/index.ts",
+    "check-env": "node check-env.js",
+    "view-orders": "ts-node view-orders.ts",
+    "view-orders-status": "ts-node view-orders-status.ts",
+    "create-dd": "ts-node create-dd-order.ts",
+    "postinstall": "npm run build"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "keywords": [
+    "gloriafood",
+    "orders",
+    "api",
+    "typescript"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "better-sqlite3": "^9.2.2",
+    "chalk": "^4.1.2",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "mysql2": "^3.15.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.10.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
