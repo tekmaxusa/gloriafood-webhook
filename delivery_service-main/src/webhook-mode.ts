@@ -139,6 +139,22 @@ class GloriaFoodWebhookServer {
   }
 
   private setupRoutes(): void {
+    // Root endpoint
+    this.app.get('/', (req: Request, res: Response) => {
+      res.json({ 
+        status: 'ok', 
+        service: 'GloriaFood Webhook Server',
+        version: this.config.protocolVersion,
+        endpoints: {
+          health: '/health',
+          webhook: this.config.webhookPath,
+          orders: '/orders',
+          stats: '/stats'
+        },
+        timestamp: new Date().toISOString()
+      });
+    });
+    
     // Health check endpoint
     this.app.get('/health', (req: Request, res: Response) => {
       res.json({ 
