@@ -58,6 +58,16 @@ class GloriaFoodWebhookServer {
     const developerId = process.env.DOORDASH_DEVELOPER_ID;
     const keyId = process.env.DOORDASH_KEY_ID;
     const signingSecret = process.env.DOORDASH_SIGNING_SECRET;
+    const merchantId = process.env.DOORDASH_MERCHANT_ID;
+    const sandbox = process.env.DOORDASH_SANDBOX;
+
+    // Debug: Log what we found (without showing actual secrets)
+    console.log(chalk.blue('\n🔍 DoorDash Credentials Check:'));
+    console.log(chalk.gray(`   DOORDASH_DEVELOPER_ID: ${developerId ? '✅ SET (' + developerId.substring(0, 4) + '...)' : '❌ NOT SET'}`));
+    console.log(chalk.gray(`   DOORDASH_KEY_ID: ${keyId ? '✅ SET (' + keyId.substring(0, 4) + '...)' : '❌ NOT SET'}`));
+    console.log(chalk.gray(`   DOORDASH_SIGNING_SECRET: ${signingSecret ? '✅ SET (' + signingSecret.substring(0, 4) + '...)' : '❌ NOT SET'}`));
+    console.log(chalk.gray(`   DOORDASH_MERCHANT_ID: ${merchantId ? '✅ SET' : '⚠️  NOT SET (optional)'}`));
+    console.log(chalk.gray(`   DOORDASH_SANDBOX: ${sandbox || 'NOT SET'}`));
 
     if (developerId && keyId && signingSecret) {
       try {
@@ -65,16 +75,19 @@ class GloriaFoodWebhookServer {
           developerId,
           keyId,
           signingSecret,
-          merchantId: process.env.DOORDASH_MERCHANT_ID,
+          merchantId: merchantId,
           apiUrl: process.env.DOORDASH_API_URL,
-          isSandbox: process.env.DOORDASH_SANDBOX === 'true',
+          isSandbox: sandbox === 'true',
         });
-        console.log(chalk.green('✅ DoorDash API client initialized'));
+        console.log(chalk.green('✅ DoorDash API client initialized successfully'));
+        console.log(chalk.gray(`   Mode: ${sandbox === 'true' ? 'SANDBOX' : 'PRODUCTION'}`));
       } catch (error: any) {
         console.warn(chalk.yellow(`⚠️  Failed to initialize DoorDash client: ${error.message}`));
+        console.warn(chalk.yellow(`   Error stack: ${error.stack}`));
       }
     } else {
-      console.log(chalk.gray('ℹ️  DoorDash integration disabled (credentials not provided)'));
+      console.log(chalk.yellow('⚠️  DoorDash integration disabled (missing required credentials)'));
+      console.log(chalk.gray('   Required: DOORDASH_DEVELOPER_ID, DOORDASH_KEY_ID, DOORDASH_SIGNING_SECRET'));
     }
   }
 
