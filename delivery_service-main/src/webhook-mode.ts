@@ -128,6 +128,7 @@ class GloriaFoodWebhookServer {
         console.log(chalk.yellow(`   🔔 WEBHOOK REQUEST DETECTED!`));
         console.log(chalk.gray(`   Content-Type: ${req.headers['content-type'] || 'N/A'}`));
         console.log(chalk.gray(`   Body size: ${JSON.stringify(req.body || {}).length} chars`));
+        console.log(chalk.gray(`   Body keys: ${Object.keys(req.body || {}).join(', ')}`));
       }
       next();
     });
@@ -186,6 +187,7 @@ class GloriaFoodWebhookServer {
 
     // Webhook endpoint for receiving orders
     this.app.post(this.config.webhookPath, async (req: Request, res: Response) => {
+      console.log(chalk.cyan('\n🔵 WEBHOOK ENDPOINT CALLED'));
       try {
         // Validate authentication if master key is provided
         // Note: Some webhook providers may not send authentication, so we make it optional
@@ -242,12 +244,15 @@ class GloriaFoodWebhookServer {
 
         // Log received order
         const orderId = orderData.id || orderData.order_id || 'unknown';
+        console.log(chalk.green(`\n✅ Order data extracted successfully: #${orderId}`));
 
         // Determine if this is a new order BEFORE saving
         const existingBefore = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId.toString()));
 
         // Store order in database (handle both sync SQLite and async MySQL)
+        console.log(chalk.blue(`💾 Saving order to database...`));
         const savedOrder = await this.handleAsync(this.database.insertOrUpdateOrder(orderData));
+        console.log(chalk.blue(`💾 Database save result: ${savedOrder ? 'SUCCESS' : 'FAILED'}`));
 
         if (savedOrder) {
           const isNew = !existingBefore;
@@ -372,8 +377,12 @@ class GloriaFoodWebhookServer {
         });
 
       } catch (error: any) {
-        console.error(chalk.red(`❌ Webhook error: ${error.message}`));
-        console.error(chalk.gray(error.stack));
+        console.error(chalk.red.bold(`\n❌❌❌ WEBHOOK ERROR ❌❌❌`));
+        console.error(chalk.red(`Error message: ${error.message}`));
+        console.error(chalk.red(`Error stack: ${error.stack}`));
+        console.error(chalk.yellow(`Request body keys: ${Object.keys(req.body || {}).join(', ')}`));
+        console.error(chalk.yellow(`Request path: ${req.path}`));
+        console.error(chalk.yellow(`Request method: ${req.method}`));
         
         // Still return 200 to prevent GloriaFood from retrying
         // (unless you want retries, then use 5xx status)
